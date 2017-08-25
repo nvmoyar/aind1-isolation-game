@@ -4,10 +4,29 @@ and include the results in your report.
 """
 import random
 
-
 class SearchTimeout(Exception):
     """Subclass base exception for code clarity. """
     pass
+
+
+def manhattan_distance(start, end):
+    """Calculates the Manhattan distance between two points. This function is used as helper
+    for custom heuristics functions. 
+    
+    Parameters
+    ----------
+    start : a single point (0,0) (from)
+    end : a single point (6,6) (to)
+
+    Returns
+    -------
+    int 
+        Manhattan distance between two points of the board/grid
+    """
+    sx, sy = start
+    ex, ey = end
+
+    return int(abs(ex - sx) + abs(ey - sy))  
 
 
 def custom_score(game, player):
@@ -35,7 +54,25 @@ def custom_score(game, player):
         The heuristic value of the current game state to the specified player.
     """
     # TODO: finish this function!
-    raise NotImplementedError
+
+    if game.is_loser(player): 
+        return float('-inf')
+
+    if game.is_winner(player): 
+        return float('inf')   
+
+      
+    n_agent_moves   = len(game.get_legal_moves(player))
+    n_opp_moves     = len(game.get_legal_moves(game.get_opponent(player)))
+    # n_blank_spaces  = len(game.get_blank_spaces())
+    # pcent_blank_spaces = int(n_blank_spaces / (game.width * game.height) * 100) 
+
+
+    player_loc  = game.get_player_location(player)
+    opp_loc     = game.get_player_location(game.get_opponent(player))
+  
+    # penalizes short positions     
+    return float((manhattan_distance(player_loc, opp_loc)/12.0) * len(game.get_legal_moves(player)))
 
 
 def custom_score_2(game, player):
@@ -61,7 +98,18 @@ def custom_score_2(game, player):
         The heuristic value of the current game state to the specified player.
     """
     # TODO: finish this function!
-    raise NotImplementedError
+    
+    if game.is_loser(player): 
+        return float('-inf')
+
+    if game.is_winner(player): 
+        return float('inf')   
+
+    n_agent_moves = len(game.get_legal_moves(player))
+    n_opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
+
+    # penalizes opponent's move in a factor of abitrary number
+    return float(n_agent_moves - 4.0 * n_opp_moves)      
 
 
 def custom_score_3(game, player):
@@ -87,7 +135,27 @@ def custom_score_3(game, player):
         The heuristic value of the current game state to the specified player.
     """
     # TODO: finish this function!
-    raise NotImplementedError
+    
+    if game.is_loser(player): 
+        return float('-inf')
+
+    if game.is_winner(player): 
+        return float('inf')   
+
+      
+    n_agent_moves   = len(game.get_legal_moves(player))
+    n_opp_moves     = len(game.get_legal_moves(game.get_opponent(player)))
+    
+    # n_blank_spaces  = len(game.get_blank_spaces())
+    # pcent_blank_spaces = int(n_blank_spaces / (game.width * game.height) * 100) 
+
+
+    player_loc  = game.get_player_location(player)
+    opp_loc     = game.get_player_location(game.get_opponent(player))
+  
+    # longer manhattan distance from the opponent, more penalization to the opponents move    
+    return float(n_agent_moves - manhattan_distance(player_loc, opp_loc) * n_opp_moves)       
+
 
 
 class IsolationPlayer:
@@ -112,7 +180,7 @@ class IsolationPlayer:
         positive value large enough to allow the function to return before the
         timer expires.
     """
-    def __init__(self, search_depth=3, score_fn=custom_score, timeout=10.):
+    def __init__(self, search_depth=3, score_fn=custom_score, timeout=15.):
         self.search_depth = search_depth
         self.score = score_fn
         self.time_left = None
@@ -124,6 +192,19 @@ class MinimaxPlayer(IsolationPlayer):
     search. You must finish and test this player to make sure it properly uses
     minimax to return a good move before the search time limit expires.
     """
+
+    def check_time_left(self):
+        """
+        Timer function, checks the remaining time and raises exception if the time left is under the TIMER_THRESHOLD 
+        As this function is used in both classes Minimax and Alphabeta, it could be included in the IsolationPlayer class.
+
+        Parameters
+        ----------
+        self : current object
+        """    
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise SearchTimeout()
+
 
     def get_move(self, game, time_left):
         """Search for the best move from the available legal moves and return a
@@ -157,7 +238,15 @@ class MinimaxPlayer(IsolationPlayer):
 
         # Initialize the best move so that this function returns something
         # in case the search fails due to timeout
-        best_move = (-1, -1)
+
+        legal_moves = game.get_legal_moves()
+
+        if len(legal_moves) == 0:
+            return (-1, -1)
+        
+        # best_move = (-1, -1)
+        # best_move = legal_moves[random.randint(0, len(legal_moves) - 1)]
+        best_move = legal_moves[0]
 
         try:
             # The try/except block will automatically catch the exception
@@ -209,11 +298,106 @@ class MinimaxPlayer(IsolationPlayer):
                 each helper function or else your agent will timeout during
                 testing.
         """
-        if self.time_left() < self.TIMER_THRESHOLD:
-            raise SearchTimeout()
+        
 
         # TODO: finish this function!
-        raise NotImplementedError
+                   
+        # nvmoyar: Minimax decision 
+
+        self.check_time_left()
+
+        legal_moves = game.get_legal_moves()
+
+        if len(legal_moves) == 0:
+            return (-1, -1)
+         
+        # best_move = (-1, -1) 
+        # best_move = random.choice(legal_moves)
+        # best_move = legal_moves[random.randint(0, len(legal_moves) - 1)]
+        best_move = legal_moves[0]
+
+        # We call min_value() first instead of max_value() because the root node itself is a "max" node    
+        best_moves = [(self.min_value(game.forecast_move(move), depth-1), move) for move in legal_moves]
+        _value, best_move = max(best_moves)
+
+        return best_move
+
+    # ---> START mutually recursive helper functions  
+
+    def max_value(self, game, depth):
+        """
+        Helper function to get the max_value for minimax function, given a fixed depth
+        Parameters
+        ----------
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
+        depth : int
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+
+        Returns
+        -------
+        best_score : float 
+
+        """
+        
+        self.check_time_left()
+
+        # Return a list of all legal moves available to the active player.
+        legal_moves = game.get_legal_moves()
+
+        # Check if depth limit has been reached or if the game is in terminal state, then return utility_value
+        if len(legal_moves) ==0 or depth == 0:
+            return self.score(game, self)
+
+        best_score = float('-inf')
+
+        for move in legal_moves:
+            # Return a new board object with the specified move applied to the current game state.
+            # board = game.forecast_move(move)
+            # best_score is between max of the previous value or the current value returned by the minimax min function
+            best_score = max(best_score, self.min_value(game.forecast_move(move), depth-1))
+
+        return best_score
+
+    def min_value(self, game, depth):
+        """
+        Helper function to get the min_value for minimax function given a fixed depth
+
+        Parameters
+        ----------
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
+        depth : int
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+
+        Returns
+        -------
+        best_score : float 
+
+        """
+        
+        self.check_time_left()
+
+        # Return a list of all legal moves available to the active player.
+        legal_moves = game.get_legal_moves()
+
+        if len(legal_moves) ==0 or depth == 0:
+            return self.score(game, self)
+
+        best_score = float('inf')
+
+        for move in legal_moves:
+            best_score = min(best_score, self.max_value(game.forecast_move(move), depth-1))
+
+        return best_score    
+
+    # ---> END mutually recursive helper functions       
 
 
 class AlphaBetaPlayer(IsolationPlayer):
@@ -221,6 +405,19 @@ class AlphaBetaPlayer(IsolationPlayer):
     search with alpha-beta pruning. You must finish and test this player to
     make sure it returns a good move before the search time limit expires.
     """
+
+    def check_time_left(self):
+        """
+        Timer function, checks the remaining time and raises exception if the time left is under the TIMER_THRESHOLD 
+        As this function is used in both classes Minimax and Alphabeta, it could be included in the IsolationPlayer class.
+         
+        Parameters
+        ----------
+        self : current object
+        """    
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise SearchTimeout()
+
 
     def get_move(self, game, time_left):
         """Search for the best move from the available legal moves and return a
@@ -255,7 +452,29 @@ class AlphaBetaPlayer(IsolationPlayer):
         self.time_left = time_left
 
         # TODO: finish this function!
-        raise NotImplementedError
+        
+        # nvmoyar: 
+
+        legal_moves = game.get_legal_moves()
+
+        if len(legal_moves) == 0: 
+            return (-1, -1)
+
+        # best_move = (-1, -1)    
+        # best_move = random.choice(legal_moves)
+        # best_move = legal_moves[random.randint(0, len(legal_moves) - 1)]
+        best_move = legal_moves[0]
+
+        try: 
+            depth =  1
+            while True : # infinite loop till end of game, exploring one deeper level at a time
+                best_move = self.alphabeta(game, depth)
+                depth +=1
+
+        except SearchTimeout:
+            pass 
+        
+        return best_move            
 
     def alphabeta(self, game, depth, alpha=float("-inf"), beta=float("inf")):
         """Implement depth-limited minimax search with alpha-beta pruning as
@@ -302,8 +521,114 @@ class AlphaBetaPlayer(IsolationPlayer):
                 each helper function or else your agent will timeout during
                 testing.
         """
-        if self.time_left() < self.TIMER_THRESHOLD:
-            raise SearchTimeout()
-
+        
         # TODO: finish this function!
-        raise NotImplementedError
+
+        # nvmoyar: Minimax decision + alphabeta pruning 
+    
+        self.check_time_left()
+        legal_moves = game.get_legal_moves()
+
+        # best_move = (-1, -1)
+        # best_move = random.choice(legal_moves)
+        # best_move = legal_moves[random.randint(0, len(legal_moves) - 1)]
+        best_move = legal_moves[0]
+
+        best_score=float('-inf')
+             
+        for move in legal_moves:
+            new_board = game.forecast_move(move)
+
+            # We call min_value() first instead of max_value() because the root node itself is a "max" node
+            # get the score for the current branch
+            _value = self.min_value(new_board, alpha, beta, depth-1)
+            # check if the score is better than the current score (the last updated)
+            if _value > best_score: # the score is better, update score and move
+                best_move = move
+                best_score = _value
+
+            # update the lower bound of search and keep on searching at the current depth    
+            alpha=max(best_score, alpha)
+
+        return best_move
+
+    # ---> START mutually recursive helper functions    
+
+    def max_value(self, game, alpha, beta, depth):
+        """
+        Helper function to get the max_value for minimax search with alpha-beta pruning
+        Parameters
+        ----------
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
+        depth : int
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+
+        Returns
+        -------
+        best_score : float 
+
+        """
+
+        self.check_time_left()
+        legal_moves = game.get_legal_moves()
+
+        if depth == 0 or len(legal_moves) == 0:
+            return self.score(game, self)
+        
+        _value = float('-inf')
+        
+        for move in legal_moves:
+            new_board = game.forecast_move(move)
+           
+            min_v = self.min_value(new_board, alpha, beta, depth-1)
+            _value = max(_value, min_v)
+           
+            if _value >= beta: # if _value is lower than beta (the upper bound) update the lower bound of search (alpha)
+                return _value
+            alpha = max(_value, alpha)
+
+        return _value
+
+    def min_value(self, game, alpha, beta, depth):
+        """
+        Helper function to get the min_value for minimax search with alpha-beta pruning
+        Parameters
+        ----------
+        game : isolation.Board
+            An instance of the Isolation game `Board` class representing the
+            current game state
+
+        depth : int
+            Depth is an integer representing the maximum number of plies to
+            search in the game tree before aborting
+
+        Returns
+        -------
+        best_score : float 
+
+        """
+        
+        self.check_time_left()
+        legal_moves = game.get_legal_moves()
+
+        if depth == 0 or len(legal_moves) == 0:
+            return self.score(game, self)
+               
+        _value = float('inf')
+
+        for move in legal_moves:
+            new_board=game.forecast_move(move)
+            max_v = self.max_value(new_board, alpha, beta, depth-1)
+            _value = min(_value, max_v)
+
+            if _value <= alpha:
+                return _value
+            beta = min(beta, _value)
+
+        return _value
+
+      # ---> END mutually recursive helper functions     
